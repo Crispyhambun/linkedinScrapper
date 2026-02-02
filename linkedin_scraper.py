@@ -157,14 +157,17 @@ class LinkedInProfileScraper:
         
         try:
             self.driver.get(profile_url)
-            time.sleep(5)  # Wait for page to load
-            
-            # Scroll down to load all sections
-            self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
-            time.sleep(2)
+            time.sleep(5)
             self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(3)
-            
+
+            # Check what elements exist
+            edu_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Education')]")
+            cert_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Licenses')]")
+
+            print(f"Education headers found: {len(edu_headers)}")
+            print(f"Certification headers found: {len(cert_headers)}")
+
             profile_data = {
                 "url": profile_url,
                 "name": None,
@@ -235,11 +238,9 @@ class LinkedInProfileScraper:
             
             # Extract About section
             try:
-                # Scroll to about section
                 self.driver.execute_script("window.scrollTo(0, 0);")
                 time.sleep(1)
                 
-                # Try to click "see more" if exists
                 try:
                     show_more_buttons = self.driver.find_elements(By.CSS_SELECTOR, "button[aria-expanded='false']")
                     for btn in show_more_buttons:
@@ -254,27 +255,37 @@ class LinkedInProfileScraper:
                 except:
                     pass
                 
-                # Look for about section with multiple selector strategies
-                about_selectors = [
-                    "div[data-test-id='about'] div",  # Test ID
-                    ".pvs-list__outer-container div[class*='text']",  # Container with text
-                    "div[class*='about'] div[class*='text-body']",  # About container
-                    ".about__summary-text",  # Older selector
-                ]
-                
                 about_text = None
-                for selector in about_selectors:
+                
+                try:
+                    about_section = self.driver.find_element(By.XPATH, "//*[contains(text(), 'About')]")
+                    parent = about_section.find_element(By.XPATH, "./ancestor::section")
+                    about_elem = parent.find_element(By.CSS_SELECTOR, "p, div[class*='text']")
+                    about_text = about_elem.text.strip()
+                except:
+                    pass
+                
+                if not about_text:
                     try:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
-                        for elem in elements:
-                            text = elem.text.strip()
-                            if text and len(text) > 20:  # About section should be substantial
+                        all_p_tags = self.driver.find_elements(By.TAG_NAME, "p")
+                        for p in all_p_tags:
+                            text = p.text.strip()
+                            if text and len(text) > 50:
                                 about_text = text
                                 break
-                        if about_text:
-                            break
                     except:
-                        continue
+                        pass
+                
+                if not about_text:
+                    try:
+                        divs_with_text = self.driver.find_elements(By.CSS_SELECTOR, "div[class*='t-normal']")
+                        for div in divs_with_text:
+                            text = div.text.strip()
+                            if text and len(text) > 50 and "following" not in text.lower():
+                                about_text = text
+                                break
+                    except:
+                        pass
                 
                 if about_text:
                     profile_data["about"] = about_text
@@ -392,7 +403,6 @@ class LinkedInProfileScraper:
                 
                 education_items = []
                 
-                # Strategy 1: Find by "Education" heading
                 try:
                     edu_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Education')]")
                     if edu_headers:
@@ -403,7 +413,6 @@ class LinkedInProfileScraper:
                 except:
                     pass
                 
-                # Strategy 2: Find education items by common patterns
                 if not education_items:
                     try:
                         education_items = self.driver.find_elements(By.CSS_SELECTOR, "div[class*='pvs-entity']")
@@ -418,25 +427,27 @@ class LinkedInProfileScraper:
                         if not item_text or "education" not in item_text.lower():
                             continue
                         
-                        # School name (usually first bold text)
                         try:
-                            school_elem = item.find_element(By.CSS_SELECTOR, "span[class*='t-bold'], h3")
-                            edu_data["school"] = school_elem.text.strip()
+                            spans = item.find_elements(By.CSS_SELECTOR, "span[aria-hidden='true']")
+                            school_name = None
+                            degree_name = None
+                            
+                            for span in spans:
+                                span_text = span.text.strip()
+                                if span_text and len(span_text) > 3:
+                                    if not school_name:
+                                        school_name = span_text
+                                    elif not degree_name and school_name != span_text:
+                                        degree_name = span_text
+                                        break
+                            
+                            if school_name:
+                                edu_data["school"] = school_name
+                            if degree_name:
+                                edu_data["degree"] = degree_name
                         except:
-                            lines = item_text.split('\n')
-                            if lines:
-                                edu_data["school"] = lines[0]
+                            pass
                         
-                        # Degree
-                        try:
-                            degree_elem = item.find_element(By.CSS_SELECTOR, "span[class*='t-14']")
-                            edu_data["degree"] = degree_elem.text.strip()
-                        except:
-                            lines = item_text.split('\n')
-                            if len(lines) > 1:
-                                edu_data["degree"] = lines[1]
-                        
-                        # Duration
                         try:
                             import re
                             dates = re.findall(r'(\d{4}\s*[-–]\s*\d{4}|\d{4})', item_text)
@@ -462,33 +473,30 @@ class LinkedInProfileScraper:
                 
                 certification_items = []
                 
-                # Strategy 1: Find by "Licenses & certifications" or "Certifications" heading
                 try:
                     cert_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Licenses') or contains(text(), 'Certifications')]")
                     if cert_headers:
                         parent = cert_headers[0].find_element(By.XPATH, "./ancestor::section")
-                        cert_list_items = parent.find_elements(By.CSS_SELECTOR, "div[class*='cert'], div[class*='license'], li")
+                        cert_list_items = parent.find_elements(By.CSS_SELECTOR, "div[class*='pvs-entity']")
                         if cert_list_items:
                             certification_items = cert_list_items
                 except:
                     pass
                 
-                # Strategy 2: Find certifications by common div patterns
                 if not certification_items:
                     try:
                         all_divs = self.driver.find_elements(By.CSS_SELECTOR, "div[class*='pvs-entity']")
-                        # Filter those that might be certifications
                         for div in all_divs:
                             try:
                                 text = div.text.lower()
-                                if any(keyword in text for keyword in ['certified', 'certification', 'license', 'credential']):
+                                if any(keyword in text for keyword in ['certified', 'certification', 'license', 'credential', 'issued']):
                                     certification_items.append(div)
                             except:
                                 continue
                     except:
                         pass
                 
-                for item in certification_items[:10]:
+                for item in certification_items[:15]:
                     try:
                         cert_data = {}
                         item_text = item.text
@@ -496,25 +504,27 @@ class LinkedInProfileScraper:
                         if not item_text:
                             continue
                         
-                        # Certification name (usually first line or bold text)
                         try:
-                            cert_name_elem = item.find_element(By.CSS_SELECTOR, "span[class*='t-bold'], h3")
-                            cert_data["name"] = cert_name_elem.text.strip()
+                            spans = item.find_elements(By.CSS_SELECTOR, "span[aria-hidden='true']")
+                            cert_name = None
+                            issuer_name = None
+                            
+                            for i, span in enumerate(spans):
+                                span_text = span.text.strip()
+                                if span_text and len(span_text) > 3:
+                                    if not cert_name:
+                                        cert_name = span_text
+                                    elif not issuer_name and issuer_name != span_text:
+                                        issuer_name = span_text
+                                        break
+                            
+                            if cert_name:
+                                cert_data["name"] = cert_name
+                            if issuer_name:
+                                cert_data["issuer"] = issuer_name
                         except:
-                            lines = item_text.split('\n')
-                            if lines:
-                                cert_data["name"] = lines[0]
+                            pass
                         
-                        # Issuing organization
-                        try:
-                            issuer_elem = item.find_element(By.CSS_SELECTOR, "span[class*='t-14']")
-                            cert_data["issuer"] = issuer_elem.text.strip()
-                        except:
-                            lines = item_text.split('\n')
-                            if len(lines) > 1:
-                                cert_data["issuer"] = lines[1]
-                        
-                        # Issue/Expiration date
                         try:
                             import re
                             dates = re.findall(r'(Issued|Expires)?\s*([A-Za-z]+\s+\d{4})', item_text)
@@ -540,22 +550,75 @@ class LinkedInProfileScraper:
                     show_all.click()
                     time.sleep(3)
                     
-                    # Get skills from expanded view
-                    skill_items = self.driver.find_elements(By.CSS_SELECTOR, ".pvs-list__container .t-bold span[aria-hidden='true']")
-                    profile_data["skills"] = [skill.text for skill in skill_items[:20]]
+                    skill_items = self.driver.find_elements(By.CSS_SELECTOR, "span[aria-hidden='true']")
+                    skills_list = []
+                    for skill in skill_items:
+                        skill_text = skill.text.strip()
+                        if skill_text and len(skill_text) < 50 and skill_text not in skills_list:
+                            skills_list.append(skill_text)
                     
-                    # Go back
+                    profile_data["skills"] = skills_list[:20]
+                    
                     self.driver.back()
                     time.sleep(2)
                 except:
-                    # Get skills from main page
-                    skills_section = self.driver.find_element(By.XPATH, "//*[contains(text(), 'Skills')]")
-                    parent = skills_section.find_element(By.XPATH, "..")
-                    skill_items = parent.find_elements(By.CSS_SELECTOR, ".t-bold span[aria-hidden='true']")
-                    profile_data["skills"] = [skill.text for skill in skill_items[:10]]
+                    try:
+                        skills_section = self.driver.find_element(By.XPATH, "//*[contains(text(), 'Skills')]")
+                        parent = skills_section.find_element(By.XPATH, "./ancestor::section")
+                        skill_items = parent.find_elements(By.CSS_SELECTOR, "span[aria-hidden='true']")
+                        skills_list = []
+                        for skill in skill_items:
+                            skill_text = skill.text.strip()
+                            if skill_text and len(skill_text) < 50 and skill_text not in skills_list:
+                                skills_list.append(skill_text)
+                        profile_data["skills"] = skills_list[:10]
+                    except:
+                        print("Could not extract skills")
                     
             except Exception as e:
-                print(f"Could not extract skills: {str(e)}")
+                print(f"Error extracting skills: {str(e)}")
+            
+            # Extract Languages
+            try:
+                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                time.sleep(2)
+                
+                languages = []
+                
+                try:
+                    lang_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Languages')]")
+                    if lang_headers:
+                        parent = lang_headers[0].find_element(By.XPATH, "./ancestor::section")
+                        lang_spans = parent.find_elements(By.CSS_SELECTOR, "span[aria-hidden='true']")
+                        for span in lang_spans:
+                            lang_text = span.text.strip()
+                            if lang_text and len(lang_text) < 50 and lang_text != "Languages":
+                                languages.append(lang_text)
+                except Exception as e:
+                    print(f"Debug: Languages extraction error: {str(e)}")
+                
+                if not languages:
+                    try:
+                        all_spans = self.driver.find_elements(By.TAG_NAME, "span")
+                        for i, span in enumerate(all_spans):
+                            text = span.text.strip()
+                            if text == "Languages":
+                                next_elements = all_spans[i+1:i+15]
+                                for elem in next_elements:
+                                    lang_text = elem.text.strip()
+                                    if lang_text and len(lang_text) < 30 and lang_text not in ["Languages", "+", "show all"]:
+                                        languages.append(lang_text)
+                                        if len(languages) >= 5:
+                                            break
+                                break
+                    except Exception as e:
+                        print(f" fallback languages extraction error: {str(e)}")
+                
+                if languages:
+                    profile_data["languages"] = languages
+                    
+            except Exception as e:
+                print(f"Error extracting languages: {str(e)}")
             
             return profile_data
             
@@ -586,7 +649,7 @@ def scrape_linkedin_profile(profile_url, email=None, password=None, headless=Fal
         email: LinkedIn account email (optional, not needed for manual_login)
         password: LinkedIn account password (optional, not needed for manual_login)
         headless: Run browser in headless mode
-        manual_login: If True, opens browser for manual login (supports Google OAuth)
+        manual_login: If True, opens browser for manual login (supports Google Google)
         
     Returns:
         dict: Dictionary containing profile data
