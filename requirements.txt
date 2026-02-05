@@ -1,5 +1,10 @@
 requests
 beautifulsoup4
-selenium
+selenium==4.15.2
 webdriver-manager
 lxml
+pandas
+openpyxl
+python-dotenv
+colorama
+tqdm

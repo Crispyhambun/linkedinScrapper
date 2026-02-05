@@ -1,6 +1,6 @@
 """
 LinkedIn Profile Scraper
-Extracts data from LinkedIn profiles including experience, education, certifications, and skills
+Extracts data from LinkedIn profiles including experience, certifications, and skills
 """
 
 from selenium import webdriver
@@ -49,46 +49,7 @@ class LinkedInProfileScraper:
         
     def login(self):
         """Login to LinkedIn"""
-        # Manual login mode (supports Google OAuth, Microsoft, etc.)
-        if self.manual_login:
-            return self.manual_login_flow()
-        
-        # Standard email/password login
-        if not self.email or not self.password:
-            print("Warning: No credentials provided. Some content may not be accessible.")
-            return False
-            
-        try:
-            self.driver.get("https://www.linkedin.com/login")
-            time.sleep(2)
-            
-            # Enter email
-            email_field = WebDriverWait(self.driver, 10).until(
-                EC.presence_of_element_located((By.ID, "username"))
-            )
-            email_field.send_keys(self.email)
-            
-            # Enter password
-            password_field = self.driver.find_element(By.ID, "password")
-            password_field.send_keys(self.password)
-            
-            # Click login
-            login_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
-            login_button.click()
-            
-            time.sleep(5)
-            
-            # Check if login was successful
-            if "feed" in self.driver.current_url or "mynetwork" in self.driver.current_url:
-                print("Successfully logged in to LinkedIn")
-                return True
-            else:
-                print("Login may have failed. Please check credentials.")
-                return False
-                
-        except Exception as e:
-            print(f"Login error: {str(e)}")
-            return False
+        return self.manual_login_flow()
     
     def manual_login_flow(self):
         """
@@ -152,8 +113,7 @@ class LinkedInProfileScraper:
         """
         if not self.driver:
             self.setup_driver()
-            if self.manual_login or self.email and self.password:
-                self.login()
+            self.login()
         
         try:
             self.driver.get(profile_url)
@@ -162,10 +122,8 @@ class LinkedInProfileScraper:
             time.sleep(3)
 
             # Check what elements exist
-            edu_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Education')]")
             cert_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Licenses')]")
 
-            print(f"Education headers found: {len(edu_headers)}")
             print(f"Certification headers found: {len(cert_headers)}")
 
             profile_data = {
@@ -176,7 +134,6 @@ class LinkedInProfileScraper:
                 "about": None,
                 "current_company": None,
                 "experience": [],
-                "education": [],
                 "certifications": [],
                 "skills": [],
                 "languages": []
@@ -191,6 +148,7 @@ class LinkedInProfileScraper:
                     "div[data-test-id='top-card-profile-name']",  # Test ID
                     ".text-heading-xlarge",  # Class
                     "h1.text-heading-xlarge",  # Combined
+                    ""
                 ]
                 
                 for selector in selectors:
@@ -395,76 +353,6 @@ class LinkedInProfileScraper:
             except Exception as e:
                 print(f"Error extracting experience: {str(e)}")
             
-            # Extract Education
-            try:
-                # Scroll to education section
-                self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
-                time.sleep(2)
-                
-                education_items = []
-                
-                try:
-                    edu_headers = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Education')]")
-                    if edu_headers:
-                        parent = edu_headers[0].find_element(By.XPATH, "./ancestor::section")
-                        edu_list_items = parent.find_elements(By.CSS_SELECTOR, "div[class*='education'] div, li[class*='education']")
-                        if edu_list_items:
-                            education_items = edu_list_items
-                except:
-                    pass
-                
-                if not education_items:
-                    try:
-                        education_items = self.driver.find_elements(By.CSS_SELECTOR, "div[class*='pvs-entity']")
-                    except:
-                        pass
-                
-                for item in education_items[:10]:
-                    try:
-                        edu_data = {}
-                        item_text = item.text
-                        
-                        if not item_text or "education" not in item_text.lower():
-                            continue
-                        
-                        try:
-                            spans = item.find_elements(By.CSS_SELECTOR, "span[aria-hidden='true']")
-                            school_name = None
-                            degree_name = None
-                            
-                            for span in spans:
-                                span_text = span.text.strip()
-                                if span_text and len(span_text) > 3:
-                                    if not school_name:
-                                        school_name = span_text
-                                    elif not degree_name and school_name != span_text:
-                                        degree_name = span_text
-                                        break
-                            
-                            if school_name:
-                                edu_data["school"] = school_name
-                            if degree_name:
-                                edu_data["degree"] = degree_name
-                        except:
-                            pass
-                        
-                        try:
-                            import re
-                            dates = re.findall(r'(\d{4}\s*[-–]\s*\d{4}|\d{4})', item_text)
-                            if dates:
-                                edu_data["duration"] = dates[0]
-                        except:
-                            pass
-                        
-                        if edu_data and ("school" in edu_data or "degree" in edu_data):
-                            profile_data["education"].append(edu_data)
-                    
-                    except Exception as e:
-                        continue
-                        
-            except Exception as e:
-                print(f"Error extracting education: {str(e)}")
-            
             # Extract Certifications/Licenses
             try:
                 # Scroll to certifications section
@@ -665,25 +553,8 @@ if __name__ == "__main__":
     
     profile_url = input("\nEnter LinkedIn profile URL: ")
     
-    # Ask about login method
-    print("\nLogin Options:")
-    print("1. No login (limited access)")
-    print("2. Manual login (supports Google/Microsoft OAuth)")
-    print("3. Email/Password login")
-    
-    choice = input("\nSelect option (1/2/3): ").strip()
-    
-    if choice == "1":
-        data = scrape_linkedin_profile(profile_url)
-    elif choice == "2":
-        data = scrape_linkedin_profile(profile_url, manual_login=True)
-    elif choice == "3":
-        email = input("Enter your LinkedIn email: ")
-        password = input("Enter your LinkedIn password: ")
-        data = scrape_linkedin_profile(profile_url, email=email, password=password)
-    else:
-        print("Invalid choice. Using no login mode.")
-        data = scrape_linkedin_profile(profile_url)
+    print("\nManual login required (Google/Microsoft OAuth)")
+    data = scrape_linkedin_profile(profile_url, manual_login=True)
     
     if data:
         print("\n" + "="*50)

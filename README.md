@@ -1,12 +1,11 @@
 # LinkedIn Profile Scraper
 
-A comprehensive Python-based web scraper for LinkedIn profiles. Extract work experience, education, certifications, skills, and more from any LinkedIn profile.
+A comprehensive Python-based web scraper for LinkedIn profiles. Extract work experience, certifications, skills, and more from any LinkedIn profile.
 
 ## Features
 
 - 👤 Extract name, headline, and location
 - 💼 Get current company and full work experience history
-- 🎓 Retrieve education history
 - 📜 Extract certifications and licenses
 - 💡 Get skills list
 - 📄 Extract about/summary section
@@ -88,13 +87,6 @@ The scraper returns a dictionary with the following structure:
       "description": "Leading development of..."
     }
   ],
-  "education": [
-    {
-      "school": "University Name",
-      "degree": "Bachelor of Science - Computer Science",
-      "duration": "2010 - 2014"
-    }
-  ],
   "certifications": [
     {
       "name": "AWS Certified Solutions Architect",
@@ -162,7 +154,7 @@ Check out **[profile_scraper_example.py](profile_scraper_example.py)** for detai
 
 1. Simple profile scrape
 2. Extract work experience
-3. Extract education & certifications
+3. Extract certifications
 4. Scrape multiple profiles
 5. Save profile to JSON
 6. Extract skills
